@@ -48,7 +48,7 @@ instance Arbitrary F where
           p :<=>: q -> ((:<=>:), p, q)
           p :=>:  q -> ((:=>:) , p, q)          
     in
-    [Var 0, p, q] ++ [c p' q' | (p', q') <- shrink (p, q)]
+    [Var 1, p, q] ++ [c p' q' | (p', q') <- shrink (p, q)]
   arbitrary = sized f where
     f :: Int -> Gen F
     f 0 = (resize numVar arbitrary :: Gen (Positive Int)) >>= return . Var . getPositive
