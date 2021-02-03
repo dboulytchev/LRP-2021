@@ -7,6 +7,7 @@
 
 import System.Random
 import Control.Exception
+import Control.Monad
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -48,7 +49,17 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
 propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals f = do
+  let unit = find (\ cl -> length cl == 1) f
+  case unit of 
+    Just [x] -> do 
+                let f' = filter (\ cl -> not (any (\ y -> y == x) cl)) f
+                let f'' = map (\ cl -> filter (\ y -> y /= -x) cl) f'
+                let error = any null f''
+                when (error) (throw UnSat)
+                (f''', vs) <- propagateUnitLiterals f''
+                return (f''', Set.union vs (Set.singleton x))
+    Nothing -> return (f, Set.empty)
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +67,13 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals f = let vars = nub (concat f) in 
+                          let pures = filter (\ x -> not ((-x) `elem` vars)) vars in
+                          if (null pures) then (f, Set.empty) else
+                          let asgn = Set.fromList pures in 
+                          let f' = filter (\ cl -> not (any (\ x -> x `elem` pures) cl)) f in 
+                          let (f'', asgn') = propagatePureLiterals f' in 
+                          (f'', Set.union asgn asgn')
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +81,9 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses f = let ind = zip f [0..] in 
+                            map fst $ filter (\ (cl, i) -> not (any (subsumed (cl, i)) ind)) ind where
+  subsumed (cl1, i) (cl2, j) = if (nub (sort cl1) == nub (sort cl2)) then i < j else (all (\ x -> x `elem` cl1) cl2)
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
