@@ -7,6 +7,7 @@
 
 import System.Random
 import Control.Exception
+import Control.Monad
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -48,7 +49,15 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
 propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals f = do
+  let unitcl = find (\p -> length p == 1) f
+  case unitcl of 
+    Just [l] -> do 
+                let removed = map (filter (/= -l)) (filter (\p -> not (l `elem` p)) f)
+                when ([] `elem` removed) (throw UnSat)
+                (res, vals) <- propagateUnitLiterals removed
+                return (res, Set.insert l vals)
+    Nothing -> return (f, Set.empty)
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +65,12 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals f = propagatePureLiterals' pures f where
+  pures = filter (\v -> not (-v `elem` (concat f))) (concat f)
+  propagatePureLiterals' [] f = (f, Set.empty)
+  propagatePureLiterals' pures f = (res, vals `Set.union` (Set.fromList pures)) where
+    (res, vals) = propagatePureLiterals removed
+    removed = filter (\p -> null (intersect pures p)) f
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +78,10 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses f = eliminateSubsumedClauses' $ sortOn (negate . length . nub . sort) f where
+  eliminateSubsumedClauses' [] = []
+  eliminateSubsumedClauses' (p:ps) = [p] ++ (eliminateSubsumedClauses' (cutExtraSubsumedClauses p ps)) where
+    cutExtraSubsumedClauses p f = filter (\q -> (nub $ sort q) /= (nub $ sort p)) f
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
