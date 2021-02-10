@@ -5,6 +5,10 @@
 -- Devis-Putnam-Davis–Putnam–Logemann–Loveland algorithm
 -- for propositional satisfability
 
+import Debug.Trace
+
+import Data.Function
+import Control.Monad
 import System.Random
 import Control.Exception
 import Data.List
@@ -14,6 +18,16 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import qualified Formula
 import CNF
+
+safeHead :: [a] -> Maybe a
+safeHead []    = Nothing
+safeHead (x:_) = Just x
+
+-- | Repeat action until f does not give 'Nothing' when applied to result.
+iterateWhileJust :: (a -> Maybe a) -> a -> a
+iterateWhileJust f v = case f v of
+  Nothing -> v
+  Just v' -> iterateWhileJust f v'
 
 -- A partial assignment (valuation): a *consistent* set of
 -- chosen literals (i.e. it can not contain l and ~l simultaneously).
@@ -37,6 +51,14 @@ instance Exception UnSat
 withUnSat :: IO [a] -> IO [a]
 withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 
+
+removeClosesWherePos :: Formula.Var -> CNF -> CNF
+removeClosesWherePos v = filter $ notElem v
+
+removeNegFromCloses :: Formula.Var -> CNF -> CNF
+removeNegFromCloses v = map $ filter (/= (-v))
+
+
 -- Unit propagation. Takes a formula and returns a pair of reduced formula and partial assignment
 -- (a set of chosen literals).
 -- If there a unit clause (i.e. a clause containing a single literal, say, l) choose this literal
@@ -48,7 +70,19 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
 propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals f =
+  let res@(f', val) = iterateWhileJust step (f, Set.empty)
+  in  when ([] `elem` f') (throwIO UnSat) >> return res
+  where step (cnf, val) = do
+        p <- chooseUnitClose
+        let cnf'  = removeClosesWherePos p cnf
+        let cnf'' = removeNegFromCloses p cnf'
+        return (cnf'', Set.insert p val)
+          where
+            chooseUnitClose :: Maybe Formula.Var
+            chooseUnitClose = safeHead $ do
+              [x] <- cnf
+              return x
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +90,13 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals f = iterateWhileJust step (f, Set.empty)
+  where
+    step (cnf, val) = do
+      l <- find isPureLiteral (concat cnf)
+      return (filter (notElem l) cnf, Set.insert l val)
+      where
+        isPureLiteral l = -l `notElem` concat cnf
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +104,9 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses f = filter (not . isSubsumed) f where
+  isSubsetOf = Set.isSubsetOf `on` Set.fromList
+  isSubsumed c = length (filter (`isSubsetOf` c) f) > 1
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
