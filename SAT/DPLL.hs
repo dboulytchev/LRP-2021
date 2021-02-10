@@ -7,6 +7,7 @@
 
 import System.Random
 import Control.Exception
+import Control.Monad
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -37,6 +38,11 @@ instance Exception UnSat
 withUnSat :: IO [a] -> IO [a]
 withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
   
+farthest :: (a -> Maybe a) -> a -> a
+farthest f = go where
+  go a = maybe a go (f a)
+{-# INLINE farthest #-}
+
 -- Unit propagation. Takes a formula and returns a pair of reduced formula and partial assignment
 -- (a set of chosen literals).
 -- If there a unit clause (i.e. a clause containing a single literal, say, l) choose this literal
@@ -47,8 +53,17 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- w.r.t. one literal can open the possibilities for unit propagations w.r.t. another. Note also,
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
-propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals :: CNF -> (CNF, Val)
+propagateUnitLiterals f = farthest propagate1 (f, Set.empty)
+  where
+    propagate1 :: (CNF, Val) -> Maybe (CNF, Val)
+    propagate1 (f, v) = do
+      [t] <- find (\x -> length x == 1) f
+      let f' = filter (\c -> not $ t `elem` c) f
+      let f'' = map (filter (/= (-t))) f'
+      when (any null f'') $ throw UnSat
+      let v' = Set.insert t v
+      return (f'', v')
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +71,15 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals f = farthest propagate1 (f, Set.empty)
+  where
+    propagate1 :: (CNF, Val) -> Maybe (CNF, Val)
+    propagate1 (f, v) = do
+      let lits = concat f
+      t <- find (\t -> not $ (-t) `elem` lits) lits
+      let f' = filter (\c -> not $ t `elem` c) f
+      let v' = Set.insert t v
+      return (f', v')
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +87,12 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses f =
+  let noStrict = filter (\c -> not $ any (`subsumesStrict` c) f) f in
+    nub $ map sort noStrict
+  where
+    subsumesStrict :: [Formula.Var] -> [Formula.Var] -> Bool
+    subsumesStrict a b = all (`elem` b) a && length b > length a
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
@@ -125,7 +153,7 @@ dpll :: CNF -> IO [Val]
 dpll f = iterate f Set.empty  where
   iterate :: CNF -> Val -> IO [Val]
   iterate f v = 
-    withUnSat $ do (f', v' ) <- propagateUnitLiterals f
+    withUnSat $ do (f', v' ) <- pure $ propagateUnitLiterals f
                    let (f'', v'') = propagatePureLiterals f'
                    let f'''       = eliminateSubsumedClauses f''
                    let v'''       = v `Set.union` v' `Set.union` v''
