@@ -27,4 +27,4 @@ equisaT f = Formula.equisat f (fromCNF $ CNF.toCNF f)
 
 -- Tseitin's conversion gives a CNF
 isCNF :: F -> Bool
-isCNF = Formula.isCNF . fromCNF . CNF.toCNF 
+isCNF = Formula.isCNF . fromCNF . CNF.toCNF
