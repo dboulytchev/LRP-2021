@@ -46,9 +46,9 @@ instance Arbitrary F where
           p :/\:  q -> ((:/\:) , p, q)
           p :\/:  q -> ((:\/:) , p, q)
           p :<=>: q -> ((:<=>:), p, q)
-          p :=>:  q -> ((:=>:) , p, q)          
+          p :=>:  q -> ((:=>:) , p, q)
     in
-    [Var 0, p, q] ++ [c p' q' | (p', q') <- shrink (p, q)]
+    [Var 1, p, q] ++ [c p' q' | (p', q') <- shrink (p, q)]
   arbitrary = sized f where
     f :: Int -> Gen F
     f 0 = (resize numVar arbitrary :: Gen (Positive Int)) >>= return . Var . getPositive
@@ -90,7 +90,7 @@ maxVar = maxVar' 0 where
 -- Evaluation w.r.t. a valuation; always returns a boolean value
 eval :: Val -> F -> Bool
 eval v f = fromJust $ eval' v f where
-  eval' v (Var n)     = v n 
+  eval' v (Var n)     = v n
   eval' v (Neg n)     = eval' v n >>= return . not
   eval' v (m :/\: n)  =
     case (eval' v m, eval' v n) of
@@ -103,24 +103,24 @@ eval v f = fromJust $ eval' v f where
       (Just True , _         ) -> Just True
       (_         , Just True ) -> Just True
       (Just False, Just False) -> Just False
-      _                        -> Nothing    
+      _                        -> Nothing
   eval' v (m :<=>: n) = return $ eval' v m == eval' v n
   eval' v (m :=>:  n) =
     case eval' v m of
       Nothing    -> eval' v n
       Just False -> Just True
-      _          -> eval' v n 
+      _          -> eval' v n
 
 -- Naively finds all satisfying valuations
 solve :: F -> [Val]
 solve = solve' empty True where
-  solve' v b (Var n) = 
+  solve' v b (Var n) =
     case v n of
       Just b' -> if b == b' then [v] else []
       Nothing -> [extend v n b]
-  solve' v b (Neg l)       = solve' v (not b) l 
+  solve' v b (Neg l)       = solve' v (not b) l
   solve' v b (l1 :/\: l2) =
-    if b 
+    if b
     then concat [solve' v' b l2 | v' <- solve' v b l1]
     else solve' v b l1 ++ solve' v b l2
   solve' v b (l1 :\/:  l2) = solve' v b (Neg (Neg l1 :/\: Neg l2))
@@ -171,7 +171,7 @@ equisat f g =
     (_ : _, _ : _) -> True
     ([], [])       -> True
     _              -> False
-    
+
 -- if an argument in CNF
 isCNF :: F -> Bool
 isCNF (f :/\: g) = and [isCNF f, isCNF g]
