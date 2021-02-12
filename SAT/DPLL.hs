@@ -7,6 +7,7 @@
 
 import System.Random
 import Control.Exception
+import Control.Monad
 import Data.List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -14,6 +15,8 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 import qualified Formula
 import CNF
+
+import Debug.Trace
 
 -- A partial assignment (valuation): a *consistent* set of
 -- chosen literals (i.e. it can not contain l and ~l simultaneously).
@@ -48,7 +51,47 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
 propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals f = do
+  let loop f uval =
+                do
+                  (f_red, uval') <- (propagateUnitLiteralOnce f)
+                  if (uval' /= Set.empty) then
+                    (loop f_red $ Set.union uval uval')
+                  else
+                    return (f_red, uval)
+
+  loop f Set.empty
+
+
+propagateUnitLiteralOnce :: CNF -> IO (CNF, Val)
+propagateUnitLiteralOnce f = do
+  let u = findUnit f
+  if u == Nothing then (return (f, Set.empty)) else do
+    let (Just u_var) = u
+    let f_red = substUnit f u_var
+    if f_red == Nothing then (throw UnSat) else do
+      let (Just f') = f_red
+      return (f', Set.fromList [u_var])
+
+findUnit :: CNF -> Maybe Formula.Var
+findUnit [] = Nothing
+findUnit (x:xs) =
+  if (length x == 1) then
+    (let [x_unit] = x in Just x_unit)
+  else
+    (findUnit xs)
+
+substUnit :: CNF -> Formula.Var -> Maybe CNF
+substUnit f u_var = 
+  let f_not_yet_satisfied = filter (\xs -> not $ has_element xs u_var) f in
+  let f_falses_elim = map (\xs -> filter (\x -> x /= -u_var) xs) f_not_yet_satisfied in
+  if (has_element f_falses_elim []) then Nothing else Just f_falses_elim
+
+has_element :: Eq a => [a] -> a -> Bool
+has_element [] _ = False
+has_element (x:xs) y
+            | x == y = True
+            | otherwise = has_element xs y
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +99,11 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals f =
+  let literals = Set.toList $ Set.fromList $ concat f in
+  let pure_literals = filter (\x -> not $ has_element literals (-x)) literals in
+  let f_not_yet_satisfied = filter (\xs -> not $ any (\x -> has_element xs x) pure_literals) f in
+  (f_not_yet_satisfied, Set.fromList pure_literals)
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +111,16 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses [] = []
+eliminateSubsumedClauses (x:xs) = 
+  let eliminate = any (\y -> subsume y x) xs in
+  if eliminate then (eliminateSubsumedClauses xs) else x:(eliminateSubsumedClauses xs)
+
+subsume :: Ord a => [a] -> [a] -> Bool
+subsume x y =
+  let x' = Set.fromList x in
+  let y' = Set.fromList y in
+  x' == (Set.intersection x' y')
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
