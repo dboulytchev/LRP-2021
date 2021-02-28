@@ -89,27 +89,12 @@ maxVar = maxVar' 0 where
 
 -- Evaluation w.r.t. a valuation; always returns a boolean value
 eval :: Val -> F -> Bool
-eval v f = fromJust $ eval' v f where
-  eval' v (Var n)     = v n
-  eval' v (Neg n)     = eval' v n >>= return . not
-  eval' v (m :/\: n)  =
-    case (eval' v m, eval' v n) of
-      (Just False, _         ) -> Just False
-      (_         , Just False) -> Just False
-      (Just True , Just True ) -> Just True
-      _                        -> Nothing
-  eval' v (m :\/: n) =
-    case (eval' v m, eval' v n) of
-      (Just True , _         ) -> Just True
-      (_         , Just True ) -> Just True
-      (Just False, Just False) -> Just False
-      _                        -> Nothing
-  eval' v (m :<=>: n) = return $ eval' v m == eval' v n
-  eval' v (m :=>:  n) =
-    case eval' v m of
-      Nothing    -> eval' v n
-      Just False -> Just True
-      _          -> eval' v n
+eval v (Var n)     = fromMaybe False (v n) -- if not represented in the valuation than doesn't matter
+eval v (Neg n)     = not $ eval v n
+eval v (m :/\: n)  = eval v m && eval v n
+eval v (m :\/: n)  = eval v m || eval v n
+eval v (m :<=>: n) = eval v m == eval v n
+eval v (m :=>: n)  = (not $ eval v m) || eval v n
 
 -- Naively finds all satisfying valuations
 solve :: F -> [Val]

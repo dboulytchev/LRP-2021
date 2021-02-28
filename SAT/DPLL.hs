@@ -103,10 +103,15 @@ propagatePureLiterals f = iterateWhileJust step (f, Set.empty)
 -- words, c contains c' plus some other literals. If c' is satisfied, c
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
+
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = filter (not . isSubsumed) f where
-  isSubsetOf = Set.isSubsetOf `on` Set.fromList
-  isSubsumed c = length (filter (`isSubsetOf` c) f) > 1
+eliminateSubsumedClauses = helper . rmdups where
+  helper :: CNF -> CNF
+  helper f = filter (not . isSubsumed) f where
+    isSubsetOf = Set.isSubsetOf `on` Set.fromList
+    isSubsumed c = length (filter (`isSubsetOf` c) f) > 1
+  rmdups :: CNF -> CNF
+  rmdups = map Set.toList . nub . map Set.fromList
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
@@ -195,4 +200,4 @@ check f =
 -- Entry function. Performs property-based testing.
 main :: IO ()
 main = do
- quickCheck (mapSize (\ _ -> 10) check)
+ quickCheck $ withMaxSuccess 1000 $ mapSize (\ _ -> 10) check
