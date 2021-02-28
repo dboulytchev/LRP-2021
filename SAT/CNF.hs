@@ -44,16 +44,15 @@ trivialCNF (a, tf) = case tf of
                                 [a, -p, -q],
                                 [a, p, q]]
 
-      -- a <=> (p => q) ~~~  (a ∧ ¬p) ∨ (a ∧ q) ∨ (¬a ∧ p ∧ ¬q)
-      (Var p) :=>: (Var q) -> [[a, -p],
-                               [a, q],
-                               [-a, p, -q]]
+      -- a <=> (p => q) ~~~ (¬a ∨ ¬p ∨ q) ∧ (a ∨ p) ∧ (a ∨ ¬q)
+      (Var p) :=>: (Var q) -> [[-a, -p, q],
+                               [a, p],
+                               [a, -q]]
 
       -- a <=> ¬b       ~~~ (¬a ∨ ¬b) ∧ (a ∨ b)
       Neg (Var b) -> [[-a, -b], [a, b]]
 
       _ -> error $ "Formula " ++ show tf ++ " is not trivial"
-
 
 -- State: max variable index and current set of equasions
 type TsState = (Var, [(Var, F)])
