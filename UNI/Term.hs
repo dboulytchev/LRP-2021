@@ -9,6 +9,7 @@ import qualified Data.Set  as Set
 import Data.List
 import Test.QuickCheck
 import Debug.Trace
+import Data.Maybe
 
 -- Type synonyms for constructor and variable names
 type Cst = Int
@@ -68,12 +69,13 @@ add s v t = Map.insert v t s
 
 -- Apply a substitution to a term
 apply :: Subst -> T -> T
-apply = undefined
+apply s (V v) = fromMaybe (V v) (Term.lookup s v) 
+apply s (C c ts) = C c (map (apply s) ts)
 
 -- Occurs check: checks if a substitution contains a circular
 -- binding    
 occurs :: Subst -> Bool
-occurs = undefined
+occurs s = compWF s s
 
 -- Well-formedness: checks if a substitution does not contain
 -- circular bindings
@@ -85,11 +87,13 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-s <+> p = undefined
+s <+> p = Map.union (Map.map (\ sx -> apply p sx) s) p 
 
 -- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
 compWF :: Subst -> Subst -> Bool
-compWF = undefined
+compWF s p = null $ Set.intersection
+                     (Map.keysSet s) 
+                     (Set.fromList (foldr (\ t acc -> (fv t) ++ acc) [] p))
   
 -- A property: for all substitutions s, p and for all terms t
 --     (t s) p = t (s <+> p)
