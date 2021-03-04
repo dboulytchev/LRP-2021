@@ -75,7 +75,7 @@ apply s (C c ts) = C c (map (apply s) ts)
 -- Occurs check: checks if a substitution contains a circular
 -- binding    
 occurs :: Subst -> Bool
-occurs s = compWF s s
+occurs s = not $ compWF s s
 
 -- Well-formedness: checks if a substitution does not contain
 -- circular bindings
