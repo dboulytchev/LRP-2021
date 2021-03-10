@@ -13,12 +13,15 @@ import qualified Test.QuickCheck as QC
 -- non-variable binding; given a non-variable term returns
 -- this term
 walk :: T.Subst -> T.T -> T.T
-walk = undefined
+walk s (T.V v) = case T.lookup s v of
+    Just t -> walk s t
+    Nothing -> T.V v
+walk s t = t
 
 -- Occurs-check for terms: return true, if
 -- a variable occurs in the term
 occurs :: T.Var -> T.T -> Bool
-occurs = undefined
+occurs v t = elem v (T.fv t)
 
 -- Unification generic function. Takes an optional
 -- substitution and two terms and returns an optional
