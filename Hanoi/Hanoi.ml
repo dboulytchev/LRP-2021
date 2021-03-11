@@ -1,4 +1,4 @@
-1module L = List
+module L = List
          
 open GT
 open OCanren
@@ -80,7 +80,33 @@ let tumrepo move set set' =
     }
   }
 
-let rec evalo p set set' = invalid_arg "not implemented"
+let rec evalo p set set' =
+  let open Nat in ocanren {
+  p == [] & set' == set
+  | {
+    fresh a, b, p', stepedSet in
+    p == (a, b) :: p' &
+    evalo p' stepedSet set' & {
+      { stepedSet == set & a == b}
+      | {
+        fresh perms, onA, onB, onC, stepedSet2 in
+        permuto (a, b) set (onA, onB, onC) &
+        tumrepo (a, b) stepedSet2 stepedSet &
+        {
+          fresh topA, topB, restA, dum in
+          onA == topA :: restA &
+          {
+            onB == [] & stepedSet2 == (restA, [topA], onC)
+            | { onB == topB :: dum &
+                stepedSet2 == (restA, topA :: onB, onC) &
+                topB >= topA
+              }
+          }
+        }
+      }
+    }
+  }
+}
   
 let rec eval (p : moves) (set : set) = 
   match p with
@@ -100,12 +126,25 @@ let rec eval (p : moves) (set : set) =
 let _ = Printf.printf "%s\n" @@ show(set) @@
   eval [(A, B); (A, C); (B, C)] ([1; 2], [], [])
 
+(* let _ =
+  Printf.printf "%s\n" @@
+  show(List.ground) (show(Pair.ground) (show(pin)) (show(pin))) @@
+  L.hd @@
+  Stream.take ~n:1 @@
+  run q (fun q -> ocanren {evalo q ([1; 2; 3], [], []) ([1; 2; 3], [], [])}) project *)
+
+(*
+3 2
+1
+?
+ *)
+
 let _ =
   Printf.printf "%s\n" @@
   show(List.ground) (show(Pair.ground) (show(pin)) (show(pin))) @@
   L.hd @@
   Stream.take ~n:1 @@
-  run q (fun q -> ocanren {evalo q ([1; 2; 3], [], []) ([], [], [1; 2; 3])}) project
+  run q (fun q -> ocanren {evalo q ([1; 2; 3; 4; 5], [], []) ([], [], [1; 2; 3; 4; 5])}) project
 
 
     
