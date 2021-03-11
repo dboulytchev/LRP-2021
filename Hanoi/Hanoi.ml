@@ -1,4 +1,4 @@
-1module L = List
+module L = List
          
 open GT
 open OCanren
@@ -80,7 +80,23 @@ let tumrepo move set set' =
     }
   }
 
-let rec evalo p set set' = invalid_arg "not implemented"
+let rec evalo p set set0 =
+  let open Nat in
+  ocanren {
+    p == [] & set == set0
+    | fresh a, b, p', set1 in
+    p == (a, b) :: p' & evalo p' set1 set0 & {
+      a == b & set1 == set
+      | fresh onA, onB, onC, set2 in
+      permuto (a, b) set (onA, onB, onC) & tumrepo (a, b) set2 set1 & {
+        fresh topA, restA, topB, restB in
+        onA == (topA :: restA) & {
+          onB == [] & set2 == (restA, [topA], onC)
+          | onB == (topB :: restB) & set2 == (restA, topA :: onB, onC) & topA <= topB
+        }
+      }
+    }
+  }
   
 let rec eval (p : moves) (set : set) = 
   match p with
