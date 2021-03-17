@@ -42,4 +42,3 @@ checkUnify (t, t') =
 
 -- This check should pass:
 qcEntry = QC.quickCheck $ QC.withMaxSuccess 1000 $ (\ x -> QC.within 1000000 $ checkUnify x)
-    
