@@ -9,6 +9,8 @@ import qualified Data.Set  as Set
 import Data.List
 import Test.QuickCheck
 import Debug.Trace
+import Util (farthestDNC)
+import Data.Maybe
 
 -- Type synonyms for constructor and variable names
 type Cst = Int
@@ -66,14 +68,26 @@ lookup = flip Map.lookup
 add :: Subst -> Var -> T -> Subst
 add s v t = Map.insert v t s
 
+apply1 :: Subst -> T -> T
+apply1 s t = case t of
+    C c ts -> C c (map (apply1 s) ts)
+    V v -> (case Term.lookup s v of
+      Nothing -> V v
+      Just t -> t)
+
 -- Apply a substitution to a term
 apply :: Subst -> T -> T
-apply = undefined
+apply s = farthestDNC (apply1 s)
 
 -- Occurs check: checks if a substitution contains a circular
 -- binding
 occurs :: Subst -> Bool
-occurs = undefined
+occurs s =
+  let a = Map.map fv s in
+  let fix = farthestDNC extend a in
+  any (\a -> a `elem` fromJust (Map.lookup a fix)) (Map.keys fix)
+  where
+    extend a = Map.map (\x -> sort $ foldr Data.List.union x (map (\t -> maybe [] id (Map.lookup t a)) x)) a
 
 -- Well-formedness: checks if a substitution does not contain
 -- circular bindings
@@ -85,11 +99,11 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-s <+> p = undefined
+s <+> p = Map.union (Map.map (apply1 p) s) p
 
 -- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
 compWF :: Subst -> Subst -> Bool
-compWF = undefined
+compWF s p = null $ Set.intersection (Map.keysSet s) (foldr Set.union Set.empty (map (Set.fromList . fv) (Map.elems p)))
 
 -- A property: for all substitutions s, p and for all terms t
 --     (t s) p = t (s <+> p)
