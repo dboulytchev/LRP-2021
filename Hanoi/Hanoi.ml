@@ -85,8 +85,9 @@ let rec evalo p set set' =
   ocanren {
       p == [] & set' == set
     | fresh a, b, p', move, r in
-      p == (a, b) :: p' &
+      p == move :: p' &
       move == (a, b) &
+      evalo p' r set' &
       {
           fresh onA, onB, onC, r', topA, restA in
           permuto move set (onA, onB, onC) &
@@ -96,12 +97,11 @@ let rec evalo p set set' =
                onB == [] & r' == (restA, [topA], onC)
              | fresh topB, restB in
                onB == topB :: restB &
-               topB >= topA &
-               r' == (restA, topA :: onB, onC)
+               r' == (restA, topA :: onB, onC) &
+               topB >= topA
           }
         | a == b & r == set
-      } &
-      evalo p' r set'
+      }
   }
 
 let rec eval (p : moves) (set : set) =
