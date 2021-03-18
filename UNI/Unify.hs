@@ -36,7 +36,7 @@ unify s' t1 t2 = s' >>= (\ s ->
       _ -> Nothing
     t@(T.C c1 ts1) -> case t2' of 
       T.V u | not (occurs u t) -> Just (T.add s u t)
-      T.C c2 ts2 | c1 == c2 -> foldl (\ acc (t1', t2') -> unify acc t1' t2') s' (zip ts1 ts2)
+      T.C c2 ts2 | c1 == c2 && length ts1 == length ts2 -> foldl (\ acc (t1', t2') -> unify acc t1' t2') s' (zip ts1 ts2)
       _ -> Nothing
   )
 
