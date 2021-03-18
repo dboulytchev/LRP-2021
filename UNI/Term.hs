@@ -10,6 +10,9 @@ import Data.List
 import Test.QuickCheck
 import Debug.Trace
 
+import Data.Maybe
+import Data.Semigroup
+
 -- Type synonyms for constructor and variable names
 type Cst = Int
 type Var = Int
@@ -19,6 +22,7 @@ type Var = Int
 data T = C Cst [T] | V Var deriving (Show, Eq)
 
 -- Free variables for a term; returns a sorted list
+fv :: T -> [Var]
 fv = nub . sort . fv' [] where
   fv' acc (V   x  ) = x : acc
   fv' acc (C _ sub) = foldl fv' acc sub
@@ -34,9 +38,9 @@ instance Arbitrary T where
   shrink (C cst subs) = subs ++ [ C cst subs' | subs' <- shrink subs ]
   arbitrary = sized f where
     f :: Int -> Gen T
-    f 0 = num numVar >>= return . V
+    f 0 = V <$> num numVar
     f 1 = do cst <- num numCst
-             return $ C cst []      
+             return $ C cst []
     f n = do m   <- pos (n - 1)
              ms  <- split n m
              cst <- num numCst
@@ -44,10 +48,10 @@ instance Arbitrary T where
              return $ C cst sub
     num   n   = (resize n arbitrary :: Gen (NonNegative Int)) >>= return . getNonNegative
     pos   n   = (resize n arbitrary :: Gen (Positive    Int)) >>= return . getPositive
-    split m n = iterate [] m n 
+    split m n = iterate [] m n
     iterate acc rest 1 = return $ rest : acc
     iterate acc rest i = do k <- num rest
-                            iterate (k : acc) (rest - k) (i-1) 
+                            iterate (k : acc) (rest - k) (i-1)
 
 -- A type for a substitution: a (partial) map from
 -- variable names to terms. Note, this represents not
@@ -60,20 +64,46 @@ empty = Map.empty
 
 -- Lookups a substitution
 lookup :: Subst -> Var -> Maybe T
-lookup = flip Map.lookup 
+lookup = flip Map.lookup
 
 -- Adds in a substitution
 add :: Subst -> Var -> T -> Subst
 add s v t = Map.insert v t s
 
+-- The length of the substitution domain
+size :: Subst -> Int
+size = Map.size
+
+
+applyOnce :: Subst -> T -> T
+applyOnce s t@(V x)   = fromMaybe t (Term.lookup s x)
+applyOnce s (C c sub) = C c (applyOnce s <$> sub)
+
+-- compose a (one-time) substitution with itself
+expand :: Subst -> Subst
+expand s = Map.map (applyOnce s) s
+
+expandN :: Int -> Subst -> Subst
+expandN n = appEndo $ stimes n (Endo expand)
+
 -- Apply a substitution to a term
 apply :: Subst -> T -> T
-apply = undefined
+apply s = applyOnce $ expandN (size s) s
 
--- Occurs check: checks if a substitution contains a circular
--- binding    
+
+
+-- Occurs check: checks if a substitution contains a circular binding
+
+-- Here we exploit the fact that the length of the minimal cycle is no bigger
+-- than the number of verticies (even those with positive outdegree i.e. size s)
+-- Thus, if we apply the single-step-substitution to itself (size n) times, we
+-- either stabilize or produce an immediate reference from variable to itself
+-- (occursImmediate)
 occurs :: Subst -> Bool
-occurs = undefined
+occurs s = any occursImmediate expanded
+  where
+    occursImmediate s' = any (\(x, t) -> x `elem` fv t) $ Map.assocs s'
+    expanded = take (size s) (iterate expand s)
 
 -- Well-formedness: checks if a substitution does not contain
 -- circular bindings
@@ -85,12 +115,13 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-s <+> p = undefined
+s <+> p = Map.union (Map.map (apply p) s) p
 
--- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
+-- A condition for substitution composition s <+> p: dom (s) \cap ran (p) =
+-- \emptyset
 compWF :: Subst -> Subst -> Bool
-compWF = undefined
-  
+compWF s p = Set.disjoint (Map.keysSet s) (Set.fromList $ fv =<< Map.elems p)
+
 -- A property: for all substitutions s, p and for all terms t
 --     (t s) p = t (s <+> p)
 checkSubst :: (Subst, Subst, T) -> Bool
