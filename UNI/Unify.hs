@@ -29,13 +29,15 @@ unify :: T.Subst -> T.T -> T.T -> Maybe T.Subst
 unify s t1 t2 = go (walk s t1) (walk s t2) where
   go (T.V v1) (T.V v2)
     | v1 == v2 = Just s
-  go (T.V v1) w2 = Just $ T.add s v1 w2
-  go w1 (T.V v2) = Just $ T.add s v2 w1
+  go (T.V v1) w2
+    | not $ occurs v1 w2 = Just $ T.add s v1 w2
+  go w1 (T.V v2)
+    | not $ occurs v2 w1 = Just $ T.add s v2 w1
   go (T.C cons1 args1) (T.C cons2 args2)
-    | cons1 == cons2 = foldM unifyUncur s (zip args1 args2)
+    | cons1 == cons2 && (length args1 == length args2)
+    = foldM unifyUncur s (zip args1 args2)
     where unifyUncur s (t1, t2) = unify s t1 t2
   go _ _ = Nothing
-
 
 -- An infix version of unification
 -- with empty substitution
@@ -52,4 +54,4 @@ checkUnify (t, t') =
     Just s  -> T.apply s t == T.apply s t'
 
 -- This check should pass:
-qcEntry = QC.quickCheck $ QC.withMaxSuccess 1000 $ (\ x -> QC.within 1000000 $ checkUnify x)
+qcEntry = QC.quickCheck $ QC.withMaxSuccess 10000 $ (\ x -> QC.within 1000000 $ checkUnify x)
