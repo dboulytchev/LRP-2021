@@ -80,7 +80,30 @@ let tumrepo move set set' =
     }
   }
 
-let rec evalo p set set' = invalid_arg "not implemented"
+let rec evalo p set set' =
+  let open Nat in
+  ocanren {
+    p == [] & set == set'
+  | fresh a, b, p', setStep in
+    p == (a, b) :: p' &
+    evalo p' setStep set' &
+    {
+      a == b & setStep == set
+    | fresh onA, onB, onC, setStepPerm in
+      permuto (a, b) set (onA, onB, onC) &
+      tumrepo (a, b) setStepPerm setStep &
+      {
+        fresh topA, restA in
+        onA == topA :: restA &
+        setStepPerm == (restA, topA :: onB, onC) &
+        {
+          onB == []
+        | fresh topB, restB in
+          onB == topB :: restB & topA <= topB
+        }
+      }
+    }
+  }
 
 let rec eval (p : moves) (set : set) =
   match p with
