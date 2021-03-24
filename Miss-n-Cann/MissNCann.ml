@@ -1,3 +1,6 @@
+(* This is the implementation of the Missionaries and Cannibals problem
+   https://en.wikipedia.org/wiki/Missionaries_and_cannibals_problem *)
+
 module L = List
 
 open GT
