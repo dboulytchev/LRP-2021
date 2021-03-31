@@ -87,7 +87,7 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-s <+> p = Map.union p (Map.map (\x -> apply p x) s)
+s <+> p = Map.union (Map.map (\x -> apply p x) s) p
 
 -- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
 compWF :: Subst -> Subst -> Bool
