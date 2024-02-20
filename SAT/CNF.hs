@@ -12,10 +12,55 @@ import Control.Monad.State.Lazy
 -- literas (positive or negative variable names)
 type CNF = [[Var]]
 
+-- The type for propositional formulas
+-- data F = Var Var   | -- variable
+--          Neg F     | -- negation
+--          F :/\: F  | -- conjunction
+--          F :\/: F  | -- disjunction
+--          F :<=>: F | -- equivalence
+--          F :=>: F    -- implication
+--  deriving Show
+
 -- Tseitin's conversion
-toCNF f = undefined
+toCNF :: Formula.F -> CNF
+toCNF f = formulaCNFToListCNF $ fst $ tseitinTransform f $ Formula.maxVar f + 1 where
+  tseitinTransform :: Formula.F -> Var -> (Formula.F, Var)
+  tseitinTransform f@(Var var)       mxVr = (f, var)
+  tseitinTransform f@(Neg (Var var)) mxVr = (f, -var)
+  tseitinTransform (Neg origF)       mxVr = (fst $ tseitinTransform (Neg (Var mxVr) :<=>: origF) (mxVr + 1), mxVr)
+  tseitinTransform (l :/\:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
+                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
+                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :/\: Var rhsV)) 
+                                                      :/\: lhsF 
+                                                      :/\: rhsF
+                                            , mxVr)
+  tseitinTransform (l :\/:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
+                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
+                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :\/: Var rhsV)) 
+                                                      :/\: lhsF 
+                                                      :/\: rhsF
+                                            , mxVr)
+  tseitinTransform (l :<=>: r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
+                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
+                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :<=>: Var rhsV)) 
+                                                      :/\: lhsF 
+                                                      :/\: rhsF
+                                              , mxVr)
+  tseitinTransform (l :=>:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
+                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
+                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :=>: Var rhsV)) 
+                                                      :/\: lhsF 
+                                                      :/\: rhsF
+                                            , mxVr)
+  formulaCNFToListCNF :: Formula.F -> CNF
+  formulaCNFToListCNF (Var var)       = [[var]]
+  formulaCNFToListCNF (Neg (Var var)) = [[-var]]
+  formulaCNFToListCNF (l :\/: r)      = [head (formulaCNFToListCNF l) ++ head (formulaCNFToListCNF r)]
+  formulaCNFToListCNF (l :/\: r)      = formulaCNFToListCNF l ++ formulaCNFToListCNF r
+
 
 -- The inverse conversion
+fromCNF :: CNF -> Formula.F
 fromCNF (h : tl) = foldl (\ acc c -> acc :/\: fromClause c) (fromClause h) tl where
   fromClause (h : tl)  = foldl (\ acc v -> acc :\/: fromVar v) (fromVar h) tl
   fromVar n | n < 0     = Neg $ Var (-n)
