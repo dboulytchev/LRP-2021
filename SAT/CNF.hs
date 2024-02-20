@@ -12,15 +12,6 @@ import Control.Monad.State.Lazy
 -- literas (positive or negative variable names)
 type CNF = [[Var]]
 
--- The type for propositional formulas
--- data F = Var Var   | -- variable
---          Neg F     | -- negation
---          F :/\: F  | -- conjunction
---          F :\/: F  | -- disjunction
---          F :<=>: F | -- equivalence
---          F :=>: F    -- implication
---  deriving Show
-
 -- Tseitin's conversion
 toCNF :: Formula.F -> CNF
 toCNF f = formulaCNFToListCNF $ fst $ tseitinTransform f $ Formula.maxVar f + 1 where
