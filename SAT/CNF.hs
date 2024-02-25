@@ -14,7 +14,7 @@ type CNF = [[Var]]
 
 -- Tseitin's conversion
 toCNF :: Formula.F -> CNF
-toCNF f = filter (/= []) $ fst $ tseitins (Formula.maxVar f) f where
+toCNF f = filter (/= []) $ (\tseitinsResult -> [fst $ snd tseitinsResult] : fst tseitinsResult) $ tseitins (Formula.maxVar f) f where
   tseitins :: Int -> Formula.F -> (CNF, (Var, Int))
   tseitins newVarOffset (Var var)        = ([[var]], (var, 0))
   tseitins newVarOffset (Neg (Var var))  = ([[-var]], (-var, 0))
