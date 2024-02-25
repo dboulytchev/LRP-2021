@@ -14,40 +14,84 @@ type CNF = [[Var]]
 
 -- Tseitin's conversion
 toCNF :: Formula.F -> CNF
-toCNF f = formulaCNFToListCNF $ fst $ tseitinTransform f $ Formula.maxVar f + 1 where
-  tseitinTransform :: Formula.F -> Var -> (Formula.F, Var)
-  tseitinTransform f@(Var var)       mxVr = (f, var)
-  tseitinTransform f@(Neg (Var var)) mxVr = (f, -var)
-  tseitinTransform (Neg origF)       mxVr = (fst $ tseitinTransform (Neg (Var mxVr) :<=>: origF) (mxVr + 1), mxVr)
-  tseitinTransform (l :/\:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
-                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
-                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :/\: Var rhsV)) 
-                                                      :/\: lhsF 
-                                                      :/\: rhsF
-                                            , mxVr)
-  tseitinTransform (l :\/:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
-                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
-                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :\/: Var rhsV)) 
-                                                      :/\: lhsF 
-                                                      :/\: rhsF
-                                            , mxVr)
-  tseitinTransform (l :<=>: r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
-                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
-                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :<=>: Var rhsV)) 
-                                                      :/\: lhsF 
-                                                      :/\: rhsF
-                                              , mxVr)
-  tseitinTransform (l :=>:  r)       mxVr = let (lhsF, lhsV) = tseitinTransform l (mxVr + 1) in
-                                            let (rhsF, rhsV) = tseitinTransform r (max (mxVr + 1) $ Formula.maxVar lhsF + 1) in
-                                            (Var mxVr :/\: Formula.toCNF (Var mxVr :<=>: (Var lhsV :=>: Var rhsV)) 
-                                                      :/\: lhsF 
-                                                      :/\: rhsF
-                                            , mxVr)
-  formulaCNFToListCNF :: Formula.F -> CNF
-  formulaCNFToListCNF (Var var)       = [[var]]
-  formulaCNFToListCNF (Neg (Var var)) = [[-var]]
-  formulaCNFToListCNF (l :\/: r)      = [head (formulaCNFToListCNF l) ++ head (formulaCNFToListCNF r)]
-  formulaCNFToListCNF (l :/\: r)      = formulaCNFToListCNF l ++ formulaCNFToListCNF r
+toCNF f = filter (/= []) $ (\tseitinsResult -> [fst $ snd tseitinsResult] : fst tseitinsResult) $ tseitins (Formula.maxVar f) f where
+  tseitins :: Int -> Formula.F -> (CNF, (Var, Int))
+  tseitins newVarOffset (Var var)        = ([[var]], (var, 0))
+  tseitins newVarOffset (Neg (Var var))  = ([[-var]], (-var, 0))
+  tseitins newVarOffset (Neg f)          = ([-newVar, -cVar] : [newVar, cVar] : childCNF, (newVar, 1 + cNewVars)) where
+                                             (cCNF, (cVar, cNewVars)) = tseitins newVarOffset f 
+                                             childCNF                 = if cNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          cCNF
+                                             newVar                   = if cNewVars == 0 then 
+                                                                          newVarOffset + 1 
+                                                                        else 
+                                                                          cVar + 1
+  tseitins newVarOffset (l :/\: r)       = (([-newVar, lVar] : [-newVar, rVar] : [newVar, -lVar, -rVar] : leftCNF) ++ rightCNF, (newVar, 1 + lNewVars + rNewVars)) where
+                                             (lCNF, (lVar, lNewVars)) = tseitins newVarOffset l 
+                                             leftCNF                  = if lNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          lCNF
+                                             rOffset                  = newVarOffset + lNewVars
+                                             (rCNF, (rVar, rNewVars)) = tseitins rOffset r
+                                             rightCNF                 = if rNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          rCNF
+                                             newVar                   = if rNewVars == 0 then 
+                                                                          rOffset + 1 
+                                                                        else 
+                                                                          abs rVar + 1
+  tseitins newVarOffset (l :\/: r)       = (([newVar, -lVar] : [newVar, -rVar] : [-newVar, lVar, rVar] : leftCNF) ++ rightCNF, (newVar, 1 + lNewVars + rNewVars)) where
+                                             (lCNF, (lVar, lNewVars)) = tseitins newVarOffset l 
+                                             leftCNF                  = if lNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          lCNF
+                                             rOffset                  = newVarOffset + lNewVars
+                                             (rCNF, (rVar, rNewVars)) = tseitins rOffset r
+                                             rightCNF                 = if rNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          rCNF
+                                             newVar                   = if rNewVars == 0 then 
+                                                                          rOffset + 1 
+                                                                        else 
+                                                                          abs rVar + 1
+  tseitins newVarOffset (l :=>: r)       = (([newVar, lVar] : [newVar, -rVar] : [-newVar, -lVar, rVar] : leftCNF) ++ rightCNF, (newVar, 1 + lNewVars + rNewVars)) where
+                                             (lCNF, (lVar, lNewVars)) = tseitins newVarOffset l 
+                                             leftCNF                  = if lNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          lCNF
+                                             rOffset                  = newVarOffset + lNewVars
+                                             (rCNF, (rVar, rNewVars)) = tseitins rOffset r
+                                             rightCNF                 = if rNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          rCNF
+                                             newVar                   = if rNewVars == 0 then 
+                                                                          rOffset + 1 
+                                                                        else 
+                                                                          abs rVar + 1
+  tseitins newVarOffset (l :<=>: r)      = (([newVar, lVar, rVar] : [newVar, -lVar, -rVar] : [-newVar, -lVar, rVar] : [-newVar, lVar, -rVar] : leftCNF) ++ rightCNF, (newVar, 1 + lNewVars + rNewVars)) where
+                                             (lCNF, (lVar, lNewVars)) = tseitins newVarOffset l 
+                                             leftCNF                  = if lNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          lCNF
+                                             rOffset                  = newVarOffset + lNewVars
+                                             (rCNF, (rVar, rNewVars)) = tseitins rOffset r
+                                             rightCNF                 = if rNewVars == 0 then
+                                                                          [[]]
+                                                                        else
+                                                                          rCNF
+                                             newVar                   = if rNewVars == 0 then 
+                                                                          rOffset + 1 
+                                                                        else 
+                                                                          abs rVar + 1
 
 
 -- The inverse conversion
