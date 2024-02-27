@@ -36,7 +36,7 @@ instance Arbitrary T where
     f :: Int -> Gen T
     f 0 = num numVar >>= return . V
     f 1 = do cst <- num numCst
-             return $ C cst []      
+             return $ C cst []
     f n = do m   <- pos (n - 1)
              ms  <- split n m
              cst <- num numCst
@@ -44,10 +44,10 @@ instance Arbitrary T where
              return $ C cst sub
     num   n   = (resize n arbitrary :: Gen (NonNegative Int)) >>= return . getNonNegative
     pos   n   = (resize n arbitrary :: Gen (Positive    Int)) >>= return . getPositive
-    split m n = iterate [] m n 
+    split m n = iterate [] m n
     iterate acc rest 1 = return $ rest : acc
     iterate acc rest i = do k <- num rest
-                            iterate (k : acc) (rest - k) (i-1) 
+                            iterate (k : acc) (rest - k) (i-1)
 
 -- A type for a substitution: a (partial) map from
 -- variable names to terms. Note, this represents not
@@ -60,7 +60,7 @@ empty = Map.empty
 
 -- Lookups a substitution
 lookup :: Subst -> Var -> Maybe T
-lookup = flip Map.lookup 
+lookup = flip Map.lookup
 
 -- Adds in a substitution
 add :: Subst -> Var -> T -> Subst
@@ -68,12 +68,14 @@ add s v t = Map.insert v t s
 
 -- Apply a substitution to a term
 apply :: Subst -> T -> T
-apply = undefined
+apply s t@(V v) | Just t' <- Map.lookup v s = t'
+                | otherwise                 = t
+apply s (C x ts) = C x $ map (apply s) ts
 
 -- Occurs check: checks if a substitution contains a circular
--- binding    
+-- binding
 occurs :: Subst -> Bool
-occurs = undefined
+occurs s = any (flip Map.member s) $ concatMap fv s
 
 -- Well-formedness: checks if a substitution does not contain
 -- circular bindings
@@ -85,17 +87,19 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-s <+> p = undefined
+(<+>) = Map.union
 
 -- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
 compWF :: Subst -> Subst -> Bool
-compWF = undefined
-  
+compWF s p = not $ any (flip Map.member s) $ concatMap fv p
+
 -- A property: for all substitutions s, p and for all terms t
 --     (t s) p = t (s <+> p)
 checkSubst :: (Subst, Subst, T) -> Bool
-checkSubst (s, p, t) =
-  not (wf s) || not (wf p) || not (compWF s p) || (apply p . apply s $ t) == apply (s <+> p) t
+checkSubst (s, p, t) = not (wf s)
+                    || not (wf p)
+                    || not (compWF s p)
+                    || (apply p . apply s $ t) == apply (s <+> p) t
 
 -- This check should pass:
 qcEntry = quickCheck $ withMaxSuccess 1000 $ (\ x -> within 1000000 $ checkSubst x)
