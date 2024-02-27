@@ -87,7 +87,7 @@ wf = not . occurs
 infixl 6 <+>
 
 (<+>) :: Subst -> Subst -> Subst
-(<+>) = Map.union
+s <+> p = Map.map (apply p) s `Map.union` p
 
 -- A condition for substitution composition s <+> p: dom (s) \cup ran (p) = \emptyset
 compWF :: Subst -> Subst -> Bool
@@ -102,4 +102,5 @@ checkSubst (s, p, t) = not (wf s)
                     || (apply p . apply s $ t) == apply (s <+> p) t
 
 -- This check should pass:
+-- qcEntry = quickCheck $ withMaxSuccess 5000 $ (\x -> checkSubst x)
 qcEntry = quickCheck $ withMaxSuccess 1000 $ (\ x -> within 1000000 $ checkSubst x)
