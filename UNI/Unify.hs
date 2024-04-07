@@ -29,7 +29,7 @@ occurs v t = v `elem` T.fv t
 -- substitution and two terms and returns an optional
 -- MGU
 unify :: Maybe T.Subst -> T.T -> T.T -> Maybe T.Subst
-unify Nothing  t1 t2    = unify (Just T.empty) t1 t2
+unify Nothing     t1 t2 = unify (Just T.empty) t1 t2
 unify js@(Just s) t1 t2 = let walks = (walk s t1, walk s t2) in
                           case walks of
                             (T.V l'   , T.V r')    -> if l' /= r' then 
@@ -50,6 +50,16 @@ unify js@(Just s) t1 t2 = let walks = (walk s t1, walk s t2) in
                                                                                  fun :: Maybe T.Subst -> (T.T, T.T) -> Maybe T.Subst
                                                                                  fun Nothing  _         = Nothing
                                                                                  fun js       (l, r)    = unify js l r
+
+-- Unify list function. Takes an optional substitution and 
+-- list of terms of equal lengths and returns an optional MGU
+unifyLists :: Maybe T.Subst -> [T.T] -> [T.T] -> Maybe T.Subst
+unifyLists Nothing  t1s      t2s      = unifyLists (Just T.empty) t1s t2s
+unifyLists s        []       []       = s
+unifyLists _        _        []       = Nothing
+unifyLists _        []       _        = Nothing
+unifyLists s        (t1:t1s) (t2:t2s) = do newS <- unify s t1 t2
+                                           unifyLists (Just newS) t1s t2s
 
 -- An infix version of unification
 -- with empty substitution
