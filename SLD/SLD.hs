@@ -85,7 +85,7 @@ evalRec (p, (t, s, goal@((atom, terms) : as)) : tl) =
       else let renamedT           = renameHornHelper s p h in
            let renamedPredAtoms   = snd renamedT           in
            let renamedPredTerms   = snd (fst renamedT)     in
-           case unifyLists (Just s) renamedPredTerms terms of
+           case unifyLists (Just s) terms renamedPredTerms of
              Nothing  -> evalRec (p, newStack)
              Just mgu -> evalRec (p, (p, mgu, renamedPredAtoms ++ as) : newStack)
                                                 
