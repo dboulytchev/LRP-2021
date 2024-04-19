@@ -1,5 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
+module DPLL where
+
 -- Supplementary materials for the course of logic and relational programming, 2021
 -- (C) Dmitry Boulytchev, dboulytchev@gmail.com
 -- Devis-Putnam-Davis–Putnam–Logemann–Loveland algorithm
@@ -8,6 +10,7 @@
 import System.Random
 import Control.Exception
 import Data.List
+import Data.Function (on)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Test.QuickCheck
@@ -25,7 +28,7 @@ toVal :: Val -> Formula.Val
 toVal =
   Set.foldl
     (\ v l -> Formula.extend v (abs l) $ if l > 0 then True else False)
-    Formula.empty 
+    Formula.empty
 
 -- An exception to throw when an inconsistent choice of literals is encountered
 data UnSat = UnSat deriving Show
@@ -36,7 +39,7 @@ instance Exception UnSat
 -- converts its into an empty list
 withUnSat :: IO [a] -> IO [a]
 withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
-  
+
 -- Unit propagation. Takes a formula and returns a pair of reduced formula and partial assignment
 -- (a set of chosen literals).
 -- If there a unit clause (i.e. a clause containing a single literal, say, l) choose this literal
@@ -48,7 +51,20 @@ withUnSat action = catch action $ (\ (_ :: UnSat) -> return [])
 -- unit propagation can result in an inconsistent assignment which has to be detected and
 -- handled properly by throwing the UnSat exception.
 propagateUnitLiterals :: CNF -> IO (CNF, Val)
-propagateUnitLiterals f = undefined
+propagateUnitLiterals cnf = do let units = map head $ filter ((== 1) . length) cnf
+                               v <- foldl f (return Set.empty) units
+                               (changed, cnf') <- applyValuation v cnf
+                               (cnf'', v') <- if changed
+                                              then propagateUnitLiterals cnf'
+                                              else return (cnf', Set.empty)
+                               return (cnf'', v <> v')
+
+    where f v l = v >>= f' l
+
+          f' :: Formula.Var -> Val -> IO Val
+          f' l v | Set.member   l  v = return v
+                 | Set.member (-l) v = throw UnSat
+                 | otherwise         = return $ Set.insert l v
 
 -- Pure literal propagation. Takes a formula, returns reduced formula and partial
 -- assignment.
@@ -56,7 +72,14 @@ propagateUnitLiterals f = undefined
 -- A pure literal can be chosen with no conflicts and all containing it clauses can
 -- be removed.
 propagatePureLiterals :: CNF -> (CNF, Val)
-propagatePureLiterals f = undefined
+propagatePureLiterals cnf = let lits = Set.fromList $ concat cnf in
+                            let (nl, pl) = Set.split 0 lits in
+                            let notPure = Set.map negate nl `Set.intersection` pl in
+                            let purePL = pl Set.\\ notPure in
+                            let pureNL = nl Set.\\ Set.map negate notPure in
+                            let pureL = pureNL `Set.union` purePL in
+                            let cnf' = filter (not . any (flip Set.member pureL)) cnf in
+                            (cnf', pureL)
 
 -- Subsumed clauses elimination. Takes a formula, returns a reduced formula.
 -- A clause c is subsumed by c' iff all literals from c' occur in c (in other
@@ -64,7 +87,11 @@ propagatePureLiterals f = undefined
 -- also is satisfied, and, thus, can be removed. Subsumed clauses elimination
 -- can not lead to conflicts.
 eliminateSubsumedClauses :: CNF -> CNF
-eliminateSubsumedClauses f = undefined
+eliminateSubsumedClauses cnf = let cls = sortBy (compare `on` length) $ map Set.fromList cnf in
+                               map Set.toList $ foldl f [] cls
+
+    where f acc cl | any (`Set.isSubsetOf` cl) acc = acc
+                   | otherwise                     = cl:acc
 
 -- Chooses a random (well, pseudo-random) literal of the formula for
 -- the branching. Returns a pair of literals for the same variable
@@ -86,12 +113,12 @@ applyValuation s f =
   foldl (\ acc c ->
             do
               (f, acc) <- acc
-              case foldl (\ c' l ->                           
+              case foldl (\ c' l ->
                             do (c', f) <- c'
                                if Set.member l s then Nothing
                                else if Set.member (-l) s
                                     then return (c', True)
-                                    else return $ (l : c', f) 
+                                    else return $ (l : c', f)
                          ) (Just ([], False)) c of
                 Just ([], _)  -> throw UnSat
                 Just (c', f') -> return (f' || f, c' : acc)
@@ -107,8 +134,8 @@ applyValuation s f =
 branch :: CNF -> IO [(CNF, Val)]
 branch f = do
   (l1, l2) <- chooseRandomLiteral f
-  f1  <- apply l1 f 
-  f2  <- apply l2 f 
+  f1  <- apply l1 f
+  f2  <- apply l2 f
   return $ f1 ++ f2
   where
     apply :: Formula.Var -> CNF -> IO [(CNF, Val)]
@@ -124,7 +151,7 @@ branch f = do
 dpll :: CNF -> IO [Val]
 dpll f = iterate f Set.empty  where
   iterate :: CNF -> Val -> IO [Val]
-  iterate f v = 
+  iterate f v =
     withUnSat $ do (f', v' ) <- propagateUnitLiterals f
                    let (f'', v'') = propagatePureLiterals f'
                    let f'''       = eliminateSubsumedClauses f''
@@ -137,22 +164,30 @@ dpll f = iterate f Set.empty  where
                                        val <- iterate f (Set.union v''' v)
                                        return $ val ++ acc
                                     ) (return []) bs
-                                
--- QuickCheck property. Takes a formula, converts it into CNF, 
+
+-- QuickCheck property. Takes a formula, converts it into CNF,
 -- solves with DPLL and checks, that the assignment satisifies the formula.
 -- If no assignments found, checks, that the formula unsatisfiable.
 check :: Formula.F -> Property
 check f =
   let cnf = CNF.toCNF   f   in
   let f'  = fromCNF cnf in
-  monadicIO $ do vals <- run $ dpll cnf
+  monadicIO $ do run $ putStrLn $ show f
+                 vals <- run $ dpll cnf
                  return $ case vals of
                           [] -> null $ Formula.solve f'
-                          _  -> and $ map (\ v -> Formula.eval (toVal v) f') vals  
+                          _  -> and $ map (\ v -> Formula.eval (toVal v) f') vals
+
+-- QuickCheck for CNF.toCNF
+checkCNF :: Formula.F -> Property
+checkCNF f = monadicIO $ do run $ putStrLn $ show f
+                            return $ CNF.equisaT f
 
 -- Entry function. Performs property-based testing.
 main :: IO ()
 main = do
- quickCheck (mapSize (\ _ -> 10) check)
+    -- putStrLn "Check CNF.toCNF"
+    -- quickCheck (mapSize (\ _ -> 10) checkCNF)
 
-
+    putStrLn "Check DPLL"
+    quickCheck (mapSize (\ _ -> 10) check)
