@@ -1,8 +1,8 @@
+module Unify where
+
 -- Supplementary materials for the course of logic and relational programming, 2021
 -- (C) Dmitry Boulytchev, dboulytchev@gmail.com
 -- Unification.
-
-module Unify where
 
 import qualified Data.Map        as Map
 import qualified Term            as T
@@ -52,4 +52,5 @@ checkUnify (t, t') =
     Just s  -> T.apply s t == T.apply s t'
 
 -- This check should pass:
+qcEntry :: IO ()
 qcEntry = QC.quickCheck $ QC.withMaxSuccess 1000 $ QC.within 1000000 . checkUnify

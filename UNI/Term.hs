@@ -1,9 +1,10 @@
+module Term where
+
 -- Supplementary materials for the course of logic and relational programming, 2021
 -- (C) Dmitry Boulytchev, dboulytchev@gmail.com
 -- Terms.
 
-module Term where
-
+import           Data.Char       (chr, ord)
 import           Data.List       (nub, sort)
 import qualified Data.Map        as Map
 import           Test.QuickCheck
@@ -14,15 +15,29 @@ type Var = Int
 
 -- A type for terms: either a constructor applied to subterms
 -- or a variable
-data T = C Cst [T] | V Var deriving (Show, Eq)
+data T = C Cst [T] | V Var deriving Eq
+
+-- Special Show for Peano numbers to be printed in digits
+instance Show T where
+  show = either id (('_' :) . show) . tryN
+    where
+      tryN :: T -> Either String Int
+      tryN (V x)
+        | ord 'A' <= x && x <= ord 'Z' = Left ['_', chr x]
+        | otherwise                    = Left $ "V " ++ show x
+      tryN (C 0 [])  = Right 0
+      tryN (C 1 [t]) = (+ 1) <$> tryN t
+      tryN (C c ts) = Left $ "C " ++ show c ++ " " ++ show ts
 
 -- Free variables for a term; returns a sorted list
+fv :: T -> [Var]
 fv = nub . sort . fv' [] where
   fv' acc (V   x  ) = x : acc
   fv' acc (C _ sub) = foldl fv' acc sub
 
 -- QuickCheck instantiation for formulas
 -- Don't know how to restrict the number of variables/constructors yet
+numVar, numCst :: Int
 numVar = 10
 numCst = 10
 
@@ -42,10 +57,10 @@ instance Arbitrary T where
              return $ C cst sub
     num   n   = getNonNegative <$> (resize n arbitrary :: Gen (NonNegative Int))
     pos   n   = getPositive    <$> (resize n arbitrary :: Gen (Positive    Int))
-    iterate acc rest 1 = return $ rest : acc
-    iterate acc rest i = do k <- num rest
-                            iterate (k : acc) (rest - k) (i-1)
-    split = iterate []
+    iterate_ acc rest 1 = return $ rest : acc
+    iterate_ acc rest i = do k <- num rest
+                             iterate_ (k : acc) (rest - k) (i-1)
+    split = iterate_ []
 
 -- A type for a substitution: a (partial) map from
 -- variable names to terms. Note, this represents not
@@ -101,4 +116,5 @@ checkSubst (s, p, t) =
   not (wf s) || not (wf p) || not (compWF s p) || (apply p . apply s $ t) == apply (s <+> p) t
 
 -- This check should pass:
+qcEntry :: IO ()
 qcEntry = quickCheck $ withMaxSuccess 1000 $ within 1000000 . checkSubst
