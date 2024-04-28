@@ -1,4 +1,4 @@
-1module L = List
+module L = List
          
 open GT
 open OCanren
@@ -13,9 +13,19 @@ open OCanren.Std
 @type moves  = move GT.list with show
 @type lmoves = ocanren {move list} with show
 
-let a () = inj @@ lift A
-let b () = inj @@ lift B
-let c () = inj @@ lift C
+let a () = inj A
+let b () = inj B
+let c () = inj C
+
+let prj_exn_pin : (pin ilogic, pin) Reifier.t =
+  let open Env.Monad in 
+  Reifier.compose Reifier.reify (
+    let f = function
+    | Value A -> A
+    | Value B -> B
+    | Value C -> C
+    in return f
+  )
 
 let extra = function
 | (A, B) | (B, A) -> C
@@ -80,7 +90,25 @@ let tumrepo move set set' =
     }
   }
 
-let rec evalo p set set' = invalid_arg "not implemented"
+let rec evalo p set set' = ocanren {
+  p == [] & set == set'
+| fresh a, b, p', set'' in
+  p == (a, b) :: p' & {
+    a == b & set'' == set
+  | fresh coreA, coreB, coreC, set''' in
+    permuto (a, b) set (coreA, coreB, coreC) & {
+      fresh topA, restA in
+      coreA == topA :: restA &
+      set''' == (restA, topA :: coreB, coreC) & {
+        coreB == []
+      | fresh topB, restB, ineq in
+        coreB == topB :: restB &
+        Nat.leo topA topB ineq &
+        ineq == true
+      }
+    } & tumrepo (a, b) set''' set''
+  } & evalo p' set'' set'
+}
   
 let rec eval (p : moves) (set : set) = 
   match p with
@@ -105,8 +133,5 @@ let _ =
   show(List.ground) (show(Pair.ground) (show(pin)) (show(pin))) @@
   L.hd @@
   Stream.take ~n:1 @@
-  run q (fun q -> ocanren {evalo q ([1; 2; 3], [], []) ([], [], [1; 2; 3])}) project
-
-
-    
-  
+  run q (fun q -> ocanren {evalo q ([1; 2; 3], [], []) ([], [], [1; 2; 3])}) 
+        (fun r -> r#reify @@ List.prj_exn @@ Pair.prj_exn prj_exn_pin prj_exn_pin)

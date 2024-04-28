@@ -1,0 +1,12 @@
+*
+!/**/
+!*.*
+!Makefile
+
+.vscode/
+.history/
+.depend
+
+*.o
+*.cmx
+*.cmi
