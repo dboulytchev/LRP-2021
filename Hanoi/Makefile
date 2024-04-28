@@ -4,7 +4,7 @@ OCAMLOPT = ocamlfind opt
 OCAMLDEP = ocamlfind dep
 SOURCES = Hanoi.ml # $(wildcard *.ml)
 # -dsource --- dump a text *after* camlp5 extension
-CAMLP5 = -syntax camlp5o -package GT-p5,OCanren.syntax,GT.syntax.all 
+CAMLP5 = -syntax camlp5o -package GT.syntax,OCanren.syntax,GT.syntax.all 
 PXFLAGS = $(CAMLP5)
 BFLAGS = -rectypes -g -package GT,OCanren 
 OFLAGS = $(BFLAGS)
